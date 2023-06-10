@@ -9,7 +9,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["*"],
+  "activationEvents": [
+    "onLanguage"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -60,5 +62,9 @@
   },
   "dependencies": {
     "child_process": "^1.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krshrimali/context-pilot-vscode"
   }
 }
