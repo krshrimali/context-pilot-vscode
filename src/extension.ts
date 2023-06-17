@@ -40,7 +40,7 @@ function runCommand(commandType: string, type: string) {
 
     // `${binaryPath} ${arguments.join(" ")}`,
     var binaryPath: String =
-      "context-fetcher " +
+      "context-pilot " +
       currentFile +
       " -s " +
       currentStartLine +
