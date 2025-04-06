@@ -108,6 +108,7 @@ function runCommand(commandType: string, type: string) {
     });
 }
 
+
 let indexWorkspaceCommand = vscode.commands.registerCommand(
     "contextpilot.indexWorkspace",
     async () => {
@@ -119,6 +120,10 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
 
         const command = `context-pilot ${workspacePath} -t index`;
 
+        // Create Output Channel
+        const outputChannel = vscode.window.createOutputChannel("ContextPilot Logs");
+        outputChannel.show(true); // Open it immediately
+
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "ContextPilot: Indexing Workspace",
@@ -127,25 +132,28 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
             return new Promise((resolve, reject) => {
                 const cp = childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
                     if (error) {
-                        vscode.window.showErrorMessage(`ContextPilot Indexing Failed: ${error.message}`);
+                        vscode.window.showErrorMessage(`ContextPilot Indexing Failed ❌: ${error.message}`);
+                        outputChannel.appendLine(`[ERROR] ${error.message}`);
                         reject(error);
                         return;
                     }
                     vscode.window.showInformationMessage("ContextPilot: Indexing completed successfully ✅");
+                    outputChannel.appendLine("[INFO] Indexing completed successfully ✅");
                     resolve(undefined);
                 });
 
                 cp.stdout?.on("data", (data) => {
-                    console.log(`stdout: ${data}`);
+                    outputChannel.appendLine(`[stdout] ${data.toString()}`);
                 });
 
                 cp.stderr?.on("data", (data) => {
-                    console.error(`stderr: ${data}`);
+                    outputChannel.appendLine(`[stderr] ${data.toString()}`);
                 });
             });
         });
     }
 );
+
 
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
