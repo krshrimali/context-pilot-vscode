@@ -108,6 +108,45 @@ function runCommand(commandType: string, type: string) {
     });
 }
 
+let indexWorkspaceCommand = vscode.commands.registerCommand(
+    "contextpilot.indexWorkspace",
+    async () => {
+        const workspacePath = getCurrentWorkspacePath();
+        if (!workspacePath) {
+            vscode.window.showErrorMessage("No workspace open!");
+            return;
+        }
+
+        const command = `context-pilot ${workspacePath} -t index`;
+
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "ContextPilot: Indexing Workspace",
+            cancellable: false
+        }, async (progress) => {
+            return new Promise((resolve, reject) => {
+                const cp = childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
+                    if (error) {
+                        vscode.window.showErrorMessage(`ContextPilot Indexing Failed: ${error.message}`);
+                        reject(error);
+                        return;
+                    }
+                    vscode.window.showInformationMessage("ContextPilot: Indexing completed successfully ✅");
+                    resolve(undefined);
+                });
+
+                cp.stdout?.on("data", (data) => {
+                    console.log(`stdout: ${data}`);
+                });
+
+                cp.stderr?.on("data", (data) => {
+                    console.error(`stderr: ${data}`);
+                });
+            });
+        });
+    }
+);
+
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => {
@@ -121,7 +160,8 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentFile", () => {
             runCommand("authors", "file");
-        })
+        }),
+        indexWorkspaceCommand
     );
 }
 
