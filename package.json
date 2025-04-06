@@ -70,5 +70,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/krshrimali/context-pilot-vscode"
-  }
+  },
+  "license": "MIT",
+  "author": "Kushashwa Ravi Shrimali <kushashwaravishrimali@gmail.com>",
 }
