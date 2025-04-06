@@ -5,123 +5,125 @@ import * as childProcess from "child_process";
 import internal = require("stream");
 
 function getCurrentWorkspacePath(): string | undefined {
-  var workspaceFolders = vscode.workspace.workspaceFolders;
-  if (workspaceFolders && workspaceFolders.length > 0) {
-    return workspaceFolders[0].uri.fsPath;
-  }
-  return undefined;
+    var workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        return workspaceFolders[0].uri.fsPath;
+    }
+    return undefined;
 }
 
 function runCommand(commandType: string, type: string) {
-  var { exec } = require("child_process");
+    const { exec } = require("child_process");
 
-  var activeEditor = vscode.window.activeTextEditor;
-  if (activeEditor) {
-    var currentFile = activeEditor.document.uri.fsPath;
-
-    var currentWorkspacePath = getCurrentWorkspacePath();
-    if (currentWorkspacePath === undefined) {
-      vscode.window.showErrorMessage("No workspace open");
-    }
-    var options: childProcess.ExecOptions = {
-      cwd: currentWorkspacePath, // Replace with the desired directory path
-    };
-
-    var currentStartLine = 1;
-    var currentEndLine = 0;
-    var internalCommandType = "authors";
-    if (type === "line") {
-      currentStartLine = activeEditor.selection.active.line;
-      currentEndLine = activeEditor.selection.active.line;
-    }
-    if (commandType === "files") {
-      internalCommandType = "files";
-    }
-
-    // `${binaryPath} ${arguments.join(" ")}`,
-    var binaryPath: String =
-      "context-pilot " +
-      currentFile +
-      " -s " +
-      currentStartLine +
-      " -e " +
-      currentEndLine +
-      " -t " +
-      internalCommandType;
-
-    // vscode.window.showInformationMessage("Command running: " + binaryPath);
-
-    childProcess.exec(`${binaryPath}}`, options, (error, stdout, stderr) => {
-      if (error) {
-        // console.error(`Error executing binary: ${error}`);
-        vscode.window.showInformationMessage("Error: ", error.message);
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+        vscode.window.showErrorMessage("No active editor");
         return;
-      }
+    }
 
-      // vscode.window.showInformationMessage("Output: ", stdout);
-      var outputFilesArray: string[] = stdout.replace(/"/g, "").split(",");
-      vscode.window
-        .showQuickPick(outputFilesArray, {
-          canPickMany: false,
-          placeHolder: "Output from ContextPilot",
-        })
-        .then((selectedFile) => {
-          if (internalCommandType === "files") {
-            if (selectedFile) {
-              // Do something with the selected file
-              // vscode.window.showInformationMessage("Selected files: ", selectedFile);
-              var uri = vscode.Uri.file(selectedFile);
-              var fullPathUri = vscode.Uri.file(selectedFile);
-              var fullPath = currentWorkspacePath + fullPathUri.fsPath;
-              fullPath = fullPath.replace("%0A", "");
-              vscode.window.showInformationMessage("File path: " + fullPath);
-              vscode.workspace.openTextDocument(fullPath).then((document) => {
-                vscode.window.showTextDocument(document);
-              });
-              // You can perform any further actions with the selected file
-            }
-          }
+    const currentFile = activeEditor.document.uri.fsPath;
+    const currentWorkspacePath = getCurrentWorkspacePath();
+    if (!currentWorkspacePath) {
+        vscode.window.showErrorMessage("No workspace open");
+        return;
+    }
+
+    const options: childProcess.ExecOptions = { cwd: currentWorkspacePath };
+
+    let currentStartLine = 1;
+    let currentEndLine = 0;
+    if (type === "line") {
+        const line = activeEditor.selection.active.line + 1; // +1 because VSCode lines are 0-indexed
+        currentStartLine = line;
+        currentEndLine = line;
+    }
+
+    let internalCommandType = "author";
+    if (commandType === "files") {
+        internalCommandType = "query";
+    }
+
+    const binaryPath = "context-pilot";
+    const command = `${binaryPath} ${currentWorkspacePath} -t ${internalCommandType} ${currentFile} -s ${currentStartLine} -e ${currentEndLine}`;
+
+    vscode.window.showInformationMessage("Running command: " + command);
+
+    exec(command, options, (error: any, stdout: string, stderr: string) => {
+        if (error) {
+            vscode.window.showErrorMessage("Error: " + error.message);
+            return;
+        }
+
+        if (stderr.length > 0 && !stdout) {
+            vscode.window.showErrorMessage("stderr: " + stderr);
+            return;
+        }
+
+        const outputFilesArray = stdout
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+
+        const items = outputFilesArray.map((line) => {
+            // Example: "src/main.rs - 2423 occurrences"
+            const filePath = line.split(" - ")[0].trim();
+            const occurrencesMatch = line.match(/- (\d+) occurrences/);
+            const occurrences = occurrencesMatch ? occurrencesMatch[1] : "0";
+
+            return {
+                label: filePath,
+                description: `${occurrences} occurrences`,
+            };
         });
-      if (stderr.length > 0 && !stdout) {
-        vscode.window.showErrorMessage("stderr: ", stderr);
-      }
+
+        vscode.window.showQuickPick(items, {
+            canPickMany: false,
+            placeHolder: "Select a related file from ContextPilot",
+        }).then((selectedItem) => {
+            if (selectedItem) {
+                const fileUri = vscode.Uri.file(selectedItem.label);
+                vscode.workspace.openTextDocument(fileUri).then((document) => {
+                    vscode.window.showTextDocument(document);
+                });
+            }
+        });
+
+
+        // vscode.window
+        //     .showQuickPick(outputFilesArray, {
+        //         canPickMany: false,
+        //         placeHolder: "ContextPilot Output",
+        //     })
+        //     .then((selectedFile) => {
+        //         if (selectedFile) {
+        //             // Strip occurrences if present
+        //             const filePathOnly = selectedFile.split(" - ")[0].trim();
+        //
+        //             const fileUri = vscode.Uri.file(filePathOnly);
+        //             vscode.workspace.openTextDocument(fileUri).then((document) => {
+        //                 vscode.window.showTextDocument(document);
+        //             });
+        //         }
+        //     });
     });
-  }
 }
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-  let filesCurrentLineNumber = vscode.commands.registerCommand(
-    "contextpilot.getContextFilesCurrentLineNumber",
-    () => {
-      runCommand("files", "line");
-    }
-  );
-  let filesCurrentFile = vscode.commands.registerCommand(
-    "contextpilot.getContextFilesCurrentFile",
-    () => {
-      runCommand("files", "file");
-    }
-  );
-  let authorsCurrentLineNumber = vscode.commands.registerCommand(
-    "contextpilot.getContextAuthorsCurrentLineNumber",
-    () => {
-      runCommand("authors", "line");
-    }
-  );
-  let authorsCurrentFile = vscode.commands.registerCommand(
-    "contextpilot.getContextAuthorsCurrentFile",
-    () => {
-      runCommand("authors", "file");
-    }
-  );
-
-  // context.subscriptions.push(filesCurrentLineNumber);
-  // context.subscriptions.push(authorsCurrentLineNumber);
-  // context.subscriptions.push(filesCurrentFile);
-  context.subscriptions.push(authorsCurrentFile);
+    context.subscriptions.push(
+        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => {
+            runCommand("files", "line");
+        }),
+        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentFile", () => {
+            runCommand("files", "file");
+        }),
+        vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentLineNumber", () => {
+            runCommand("authors", "line");
+        }),
+        vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentFile", () => {
+            runCommand("authors", "file");
+        })
+    );
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
