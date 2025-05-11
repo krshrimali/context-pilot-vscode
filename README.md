@@ -1,18 +1,27 @@
 # ContextPilot VSCode Plugin
 
-Check out the server code: https://github.com/krshrimali/context-pilot-rs. Make sure to build the binary and have it in your PATH before you run this extension.
+Users need to first install the server locally. The binary is currently
+available on homebrew:
 
-The plugin will be shipped to the marketplace, very soon.
+```
+brew install krshrimali/context-pilot/context-pilot
+```
+
+Once done, please make sure that `context_pilot --help` works on your system
+(for confidence). If users don't have homebrew, they can also build the binary
+from source, for more details - please check:
+https://github.com/krshrimali/context-pilot-rs.
 
 ## Usage
 
-In order to install it, please go to the [releases](https://github.com/krshrimali/context-pilot-vscode/releases) page and download the `.vsix` file along with the binary (or can download from [context-pilot-rs repository](https://github.com/krshrimali/context-pilot-rs) releases page).
-
-Just run: `code --install-extension <path_to_vsix_file>` and you are done.
-
-1. Press "Ctrl/Command + Shift + P"
-2. Type: "Context " (and you'll see multiple options, select any and enjoy)
-
+1. Open your workspace.
+2. Open the command palette (Ctrl+Shift+P or Cmd+Shift+P).
+3. Type `Context Pilot: Index Workspace` to index your workspace. This is
+   important step to make the querying faster.
+4. Type `Context Pilot: Line Number` to get related files for the current line.
+5. Type `Context Pilot: Current File` to get related files for the whole file.
+6. Type `Context Pilot: Get Context Files for Selected Range` to get related files
+   for the selected range.
 
 # ContextPilot 🧠
 
@@ -26,7 +35,6 @@ It lets you find related files, top authors, and historical context **directly f
 ## ✨ Features
 
 - 🔍 **Query Top Files** related to a line or file.
-- 👥 **Query Top Authors** who wrote a line or file.
 - 📈 **See Usage Frequency** (Occurrences) inside your project.
 - 📂 **Open related files instantly** in VSCode.
 - ⚡ **Super fast**, powered by Rust backend for indexing & querying.
@@ -39,29 +47,18 @@ It lets you find related files, top authors, and historical context **directly f
 
 ### 1. Install
 
-- Download and install from the [VSCode Marketplace](#) (Coming soon)
-- Or clone this repo and run:
-
-```bash
-npm install
-npm run compile
-```
-
-Then press `F5` to launch the extension in a new Extension Host window.
-
----
+- Download and install from the VSCode Marketplace.
 
 ### 2. Commands
 
 | Command | Description |
 | :--- | :--- |
-| `ContextPilot: Get Context Files (Line)` | Get related files for the current line. |
-| `ContextPilot: Get Context Files (File)` | Get related files for the whole file. |
-| `ContextPilot: Get Context Authors (Line)` | Get top authors for the current line. |
-| `ContextPilot: Get Context Authors (File)` | Get top authors for the entire file. |
-| `ContextPilot: Index Workspace` (coming soon) | Index your project for faster querying. |
+| `Context Pilot: Line Number` | Get related files for the current line. |
+| `Context Pilot: Current File` | Get related files for the whole file. |
+| `Context Pilot: Get Context Files for Selected Range` | Get related files for the selected range. |
+| `ContextPilot: Index Workspace` | Index your project for faster querying (necessary). |
 
-> ⚡ These commands can be triggered via the Command Palette (`Ctrl+Shift+P`) by typing `ContextPilot`.
+> ⚡ These commands can be triggered via the Command Palette (`Ctrl+Shift+P`) by typing `Context Pilot`.
 
 ---
 
@@ -80,7 +77,7 @@ Clone the repo:
 ```bash
 git clone https://github.com/krshrimali/context-pilot-vscode.git
 cd context-pilot-vscode
-npm install -g webpack webpack-cli vsce
+npm install && npm run compile
 vsce package
 ```
 
