@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
