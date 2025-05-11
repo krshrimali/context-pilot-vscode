@@ -1,12 +1,9 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as childProcess from "child_process";
 import * as path from "path";
-import internal = require("stream");
 
 function getCurrentWorkspacePath(): string | undefined {
-    var workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
         return workspaceFolders[0].uri.fsPath;
     }
@@ -33,10 +30,15 @@ function runCommand(commandType: string, type: string) {
 
     let currentStartLine = 1;
     let currentEndLine = 0;
+
     if (type === "line") {
-        const line = activeEditor.selection.active.line + 1; // +1 because VSCode lines are 0-indexed
+        const line = activeEditor.selection.active.line + 1;
         currentStartLine = line;
         currentEndLine = line;
+    } else if (type === "range") {
+        const selection = activeEditor.selection;
+        currentStartLine = selection.start.line + 1;
+        currentEndLine = selection.end.line + 1;
     }
 
     let internalCommandType = "author";
@@ -66,7 +68,6 @@ function runCommand(commandType: string, type: string) {
             .filter((line) => line.length > 0);
 
         const items = outputFilesArray.map((line) => {
-            // Example: "src/main.rs - 2423 occurrences"
             const filePath = line.split(" - ")[0].trim();
             const occurrencesMatch = line.match(/- (\d+) occurrences/);
             const occurrences = occurrencesMatch ? occurrencesMatch[1] : "0";
@@ -82,10 +83,9 @@ function runCommand(commandType: string, type: string) {
             placeHolder: "Select a related file from ContextPilot",
         }).then((selectedItem) => {
             if (selectedItem) {
-                let selectedFilePath = selectedItem.label;  // ← not selectedItem.trim()!!
-
-                let fullPath = path.join(currentWorkspacePath, selectedFilePath); // join workspace + selected file
-                let fileUri = vscode.Uri.file(fullPath);
+                const selectedFilePath = selectedItem.label;
+                const fullPath = path.join(currentWorkspacePath, selectedFilePath);
+                const fileUri = vscode.Uri.file(fullPath);
 
                 vscode.workspace.openTextDocument(fileUri).then((document) => {
                     vscode.window.showTextDocument(document);
@@ -94,27 +94,8 @@ function runCommand(commandType: string, type: string) {
                 });
             }
         });
-
-
-        // vscode.window
-        //     .showQuickPick(outputFilesArray, {
-        //         canPickMany: false,
-        //         placeHolder: "ContextPilot Output",
-        //     })
-        //     .then((selectedFile) => {
-        //         if (selectedFile) {
-        //             // Strip occurrences if present
-        //             const filePathOnly = selectedFile.split(" - ")[0].trim();
-        //
-        //             const fileUri = vscode.Uri.file(filePathOnly);
-        //             vscode.workspace.openTextDocument(fileUri).then((document) => {
-        //                 vscode.window.showTextDocument(document);
-        //             });
-        //         }
-        //     });
     });
 }
-
 
 let indexWorkspaceCommand = vscode.commands.registerCommand(
     "contextpilot.indexWorkspace",
@@ -127,15 +108,14 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
 
         const command = `context_pilot ${workspacePath} -t index`;
 
-        // Create Output Channel
         const outputChannel = vscode.window.createOutputChannel("ContextPilot Logs");
-        outputChannel.show(true); // Open it immediately
+        outputChannel.show(true);
 
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "ContextPilot: Indexing Workspace",
             cancellable: false
-        }, async (progress) => {
+        }, async () => {
             return new Promise((resolve, reject) => {
                 const cp = childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
                     if (error) {
@@ -161,7 +141,6 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
     }
 );
 
-
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => {
@@ -169,6 +148,9 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand("contextpilot.getContextFilesCurrentFile", () => {
             runCommand("files", "file");
+        }),
+        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentRange", () => {
+            runCommand("files", "range");
         }),
         vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentLineNumber", () => {
             runCommand("authors", "line");
@@ -180,5 +162,4 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() { }
+export function deactivate() {}
