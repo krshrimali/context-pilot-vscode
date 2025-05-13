@@ -7,7 +7,7 @@ available on homebrew:
 brew install krshrimali/context-pilot/context-pilot
 ```
 
-Once done, please make sure that `context_pilot --help` works on your system
+Once done, please make sure that `contextpilot --help` works on your system
 (for confidence). If users don't have homebrew, they can also build the binary
 from source, for more details - please check:
 https://github.com/krshrimali/context-pilot-rs.
@@ -64,9 +64,9 @@ It lets you find related files, top authors, and historical context **directly f
 
 ### 3. Requirements
 
-- **Rust** and **Cargo** installed (for running the backend binary `context-pilot`).
+- **Rust** and **Cargo** installed (for running the backend binary `contextpilot`).
 - **Git** installed and available in PATH.
-- `context-pilot` available as a binary in your PATH. Go to https://github.com/krshrimali/context-pilot for information. (This step will be removed soon)
+- `contextpilot` available as a binary in your PATH. Go to https://github.com/krshrimali/context-pilot-rs for information. (This step will be removed soon)
 
 ---
 
