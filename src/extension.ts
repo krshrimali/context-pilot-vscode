@@ -46,7 +46,7 @@ function runCommand(commandType: string, type: string) {
         internalCommandType = "query";
     }
 
-    const binaryPath = "context_pilot";
+    const binaryPath = "contextpilot";
     const command = `${binaryPath} ${currentWorkspacePath} -t ${internalCommandType} ${currentFile} -s ${currentStartLine} -e ${currentEndLine}`;
 
     vscode.window.showInformationMessage("Running command: " + command);
@@ -106,7 +106,7 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
             return;
         }
 
-        const command = `context_pilot ${workspacePath} -t index`;
+        const command = `contextpilot ${workspacePath} -t index`;
 
         const outputChannel = vscode.window.createOutputChannel("ContextPilot Logs");
         outputChannel.show(true);
