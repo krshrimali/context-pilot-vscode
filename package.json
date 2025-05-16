@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
@@ -31,6 +31,10 @@
             {
                 "command": "contextpilot.getContextFilesCurrentRange",
                 "title": "Context Pilot: Get Context Files for Selected Range"
+            },
+            {
+                "command": "contextpilot.getContextDescriptions",
+                "title": "Context Pilot: Get Relevant Commits"
             }
         ]
     },
@@ -53,6 +57,7 @@
         "@typescript-eslint/eslint-plugin": "^5.59.8",
         "@typescript-eslint/parser": "^5.59.8",
         "@vscode/test-electron": "^2.3.2",
+        "@vscode/vsce": "^3.4.0",
         "eslint": "^8.41.0",
         "glob": "^8.1.0",
         "mocha": "^10.2.0",
@@ -62,7 +67,8 @@
         "webpack-cli": "^5.1.4"
     },
     "dependencies": {
-        "child_process": "^1.0.2"
+        "child_process": "^1.0.2",
+        "vsce": "^2.15.0"
     },
     "repository": {
         "type": "git",

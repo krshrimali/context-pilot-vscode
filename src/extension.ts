@@ -44,6 +44,8 @@ function runCommand(commandType: string, type: string) {
     let internalCommandType = "author";
     if (commandType === "files") {
         internalCommandType = "query";
+    } else if (commandType === "desc") {
+        internalCommandType = "desc";
     }
 
     const binaryPath = "contextpilot";
@@ -59,6 +61,42 @@ function runCommand(commandType: string, type: string) {
 
         if (stderr.length > 0 && !stdout) {
             vscode.window.showErrorMessage("stderr: " + stderr);
+            return;
+        }
+
+        if (commandType === "desc") {
+            let parsed: [string, string][];
+            try {
+                parsed = JSON.parse(stdout.trim());
+            } catch (e) {
+                vscode.window.showErrorMessage("Failed to parse commit descriptions");
+                return;
+            }
+
+            const items = parsed.map(([title, description]) => ({
+                label: title,
+                description,
+            }));
+
+            vscode.window.showQuickPick(items, {
+                matchOnDetail: true,
+                placeHolder: "Select a commit to view full description",
+            }).then((selected) => {
+                if (selected) {
+                    const content = `# ${selected.label}\n\n${selected.description}`;
+                    const fileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
+                    const docUri = vscode.Uri.parse(`untitled:Commit Description - ${fileName}`);
+
+                    vscode.workspace.openTextDocument(docUri).then((doc) => {
+                        const edit = new vscode.WorkspaceEdit();
+                        edit.insert(docUri, new vscode.Position(0, 0), content);
+                        return vscode.workspace.applyEdit(edit).then(() => {
+                            vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside, false);
+                        });
+                    });
+                }
+            });
+
             return;
         }
 
@@ -158,8 +196,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentFile", () => {
             runCommand("authors", "file");
         }),
+        vscode.commands.registerCommand("contextpilot.getContextDescriptions", () => {
+            runCommand("desc", "range");
+        }),
         indexWorkspaceCommand
     );
 }
 
-export function deactivate() {}
+export function deactivate() { }
