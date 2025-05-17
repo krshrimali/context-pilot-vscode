@@ -35,6 +35,10 @@
             {
                 "command": "contextpilot.getContextDescriptions",
                 "title": "Context Pilot: Get Relevant Commits"
+            },
+            {
+                "command": "contextpilot.indexSubdirectories",
+                "title": "ContextPilot: Index All Subdirectories"
             }
         ]
     },
@@ -68,6 +72,7 @@
     },
     "dependencies": {
         "child_process": "^1.0.2",
+        "ignore": "^7.0.4",
         "vsce": "^2.15.0"
     },
     "repository": {

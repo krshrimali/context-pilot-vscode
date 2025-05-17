@@ -1,6 +1,37 @@
 import * as vscode from "vscode";
 import * as childProcess from "child_process";
 import * as path from "path";
+import * as fs from "fs";
+import ignore from "ignore";
+
+function getAllSubdirectoriesRespectingGitignore(rootDir: string): string[] {
+    let results: string[] = [];
+
+    const ig = ignore();
+    const gitignorePath = path.join(rootDir, ".gitignore");
+
+    if (fs.existsSync(gitignorePath)) {
+        const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
+        ig.add(gitignoreContent.split(/\r?\n/));
+    }
+
+    function walk(dir: string) {
+        const list = fs.readdirSync(dir, { withFileTypes: true });
+        for (const file of list) {
+            const fullPath = path.join(dir, file.name);
+            const relativePath = path.relative(rootDir, fullPath);
+            if (file.isDirectory()) {
+                if (!ig.ignores(relativePath)) {
+                    results.push(fullPath);
+                    walk(fullPath);
+                }
+            }
+        }
+    }
+
+    walk(rootDir);
+    return results;
+}
 
 function getCurrentWorkspacePath(): string | undefined {
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -65,7 +96,7 @@ function runCommand(commandType: string, type: string) {
         }
 
         if (commandType === "desc") {
-            let parsed: [string, string][];
+            let parsed: [string, string, string, string][];
             try {
                 parsed = JSON.parse(stdout.trim());
             } catch (e) {
@@ -73,24 +104,36 @@ function runCommand(commandType: string, type: string) {
                 return;
             }
 
-            const items = parsed.map(([title, description]) => ({
+            // Sort by date descending
+            parsed.sort((a, b) => {
+                const dateA = new Date(a[3]).getTime();
+                const dateB = new Date(b[3]).getTime();
+                return dateB - dateA;
+            });
+
+            const items = parsed.map(([title, description, author, date]) => ({
                 label: title,
-                description,
+                detail: `${author} • ${date}`,
+                description: description.slice(0, 80).replace(/\s+/g, " "), // Short preview
+                fullDescription: description,
+                author,
+                date,
             }));
 
             vscode.window.showQuickPick(items, {
                 matchOnDetail: true,
-                placeHolder: "Select a commit to view full description",
+                matchOnDescription: true,
+                placeHolder: "Select a commit to view details",
             }).then((selected) => {
                 if (selected) {
-                    const content = `# ${selected.label}\n\n${selected.description}`;
+                    const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}`;
                     const fileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
                     const docUri = vscode.Uri.parse(`untitled:Commit Description - ${fileName}`);
 
                     vscode.workspace.openTextDocument(docUri).then((doc) => {
                         const edit = new vscode.WorkspaceEdit();
                         edit.insert(docUri, new vscode.Position(0, 0), content);
-                        return vscode.workspace.applyEdit(edit).then(() => {
+                        vscode.workspace.applyEdit(edit).then(() => {
                             vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside, false);
                         });
                     });
@@ -179,6 +222,70 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
     }
 );
 
+const indexSubdirectoriesCommand = vscode.commands.registerCommand(
+    "contextpilot.indexSubdirectories",
+    async () => {
+        const workspacePath = getCurrentWorkspacePath();
+        if (!workspacePath) {
+            vscode.window.showErrorMessage("No workspace open!");
+            return;
+        }
+
+        const allSubdirs = getAllSubdirectoriesRespectingGitignore(workspacePath)
+            .map(dir => path.relative(workspacePath, dir))
+            .filter(p => p.length > 0); // skip root
+
+        if (allSubdirs.length === 0) {
+            vscode.window.showInformationMessage("No subdirectories found.");
+            return;
+        }
+
+        const selected = await vscode.window.showQuickPick(allSubdirs, {
+            canPickMany: true,
+            placeHolder: "Select subdirectories to index with ContextPilot"
+        });
+
+        if (!selected || selected.length === 0) {
+            vscode.window.showInformationMessage("No subdirectories selected.");
+            return;
+        }
+
+        const subDirArg = selected.join(",");
+        const command = `contextpilot ${workspacePath} -t index -i "${subDirArg}"`;
+
+        const outputChannel = vscode.window.createOutputChannel("ContextPilot Logs");
+        outputChannel.show(true);
+
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `ContextPilot: Indexing ${selected.length} subdirectories`,
+            cancellable: false
+        }, async () => {
+            return new Promise((resolve, reject) => {
+                const cp = childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
+                    if (error) {
+                        vscode.window.showErrorMessage(`Indexing failed ❌: ${error.message}`);
+                        outputChannel.appendLine(`[ERROR] ${error.message}`);
+                        reject(error);
+                        return;
+                    }
+                    vscode.window.showInformationMessage("ContextPilot: Subdirectory indexing completed ✅");
+                    outputChannel.appendLine("[INFO] Subdirectory indexing completed ✅");
+                    resolve(undefined);
+                });
+
+                cp.stdout?.on("data", (data) => {
+                    outputChannel.appendLine(`[stdout] ${data.toString()}`);
+                });
+
+                cp.stderr?.on("data", (data) => {
+                    outputChannel.appendLine(`[stderr] ${data.toString()}`);
+                });
+            });
+        });
+    }
+);
+
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => {
@@ -199,7 +306,12 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("contextpilot.getContextDescriptions", () => {
             runCommand("desc", "range");
         }),
-        indexWorkspaceCommand
+        // vscode.commands.registerCommand("contextpilot.indexWorkspace", () => {
+        //     runCommand("index", "file");
+        // }),
+        // vscode.commands.registerCommand("contextpilot.indexSubdirectories", () => {
+        //     runCommand("index", "file");
+        // })
     );
 }
 
