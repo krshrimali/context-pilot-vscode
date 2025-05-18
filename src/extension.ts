@@ -41,6 +41,25 @@ function getCurrentWorkspacePath(): string | undefined {
     return undefined;
 }
 
+class CommitDescriptionProvider implements vscode.TextDocumentContentProvider {
+    private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
+    onDidChange = this._onDidChange.event;
+
+    private contentMap = new Map<string, string>();
+
+    provideTextDocumentContent(uri: vscode.Uri): string {
+        return this.contentMap.get(uri.toString()) || "";
+    }
+
+    setContent(uri: vscode.Uri, content: string) {
+        this.contentMap.set(uri.toString(), content);
+        this._onDidChange.fire(uri);
+    }
+}
+
+const commitDescriptionProvider = new CommitDescriptionProvider();
+vscode.workspace.registerTextDocumentContentProvider("commitdesc", commitDescriptionProvider);
+
 function runCommand(commandType: string, type: string) {
     const { exec } = require("child_process");
 
@@ -104,7 +123,6 @@ function runCommand(commandType: string, type: string) {
                 return;
             }
 
-            // Sort by date descending
             parsed.sort((a, b) => {
                 const dateA = new Date(a[3]).getTime();
                 const dateB = new Date(b[3]).getTime();
@@ -114,7 +132,7 @@ function runCommand(commandType: string, type: string) {
             const items = parsed.map(([title, description, author, date]) => ({
                 label: title,
                 detail: `${author} • ${date}`,
-                description: description.slice(0, 80).replace(/\s+/g, " "), // Short preview
+                description: description.slice(0, 80).replace(/\s+/g, " "),
                 fullDescription: description,
                 author,
                 date,
@@ -127,15 +145,13 @@ function runCommand(commandType: string, type: string) {
             }).then((selected) => {
                 if (selected) {
                     const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}`;
-                    const fileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
-                    const docUri = vscode.Uri.parse(`untitled:Commit Description - ${fileName}`);
+                    const safeFileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
+                    const uri = vscode.Uri.parse(`commitdesc:${safeFileName}`);
 
-                    vscode.workspace.openTextDocument(docUri).then((doc) => {
-                        const edit = new vscode.WorkspaceEdit();
-                        edit.insert(docUri, new vscode.Position(0, 0), content);
-                        vscode.workspace.applyEdit(edit).then(() => {
-                            vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside, false);
-                        });
+                    commitDescriptionProvider.setContent(uri, content);
+
+                    vscode.workspace.openTextDocument(uri).then((doc) => {
+                        vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside, false);
                     });
                 }
             });
@@ -233,7 +249,7 @@ const indexSubdirectoriesCommand = vscode.commands.registerCommand(
 
         const allSubdirs = getAllSubdirectoriesRespectingGitignore(workspacePath)
             .map(dir => path.relative(workspacePath, dir))
-            .filter(p => p.length > 0); // skip root
+            .filter(p => p.length > 0);
 
         if (allSubdirs.length === 0) {
             vscode.window.showInformationMessage("No subdirectories found.");
@@ -306,12 +322,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("contextpilot.getContextDescriptions", () => {
             runCommand("desc", "range");
         }),
-        // vscode.commands.registerCommand("contextpilot.indexWorkspace", () => {
-        //     runCommand("index", "file");
-        // }),
-        // vscode.commands.registerCommand("contextpilot.indexSubdirectories", () => {
-        //     runCommand("index", "file");
-        // })
+        indexWorkspaceCommand,
+        indexSubdirectoriesCommand
     );
 }
 
