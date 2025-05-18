@@ -7,28 +7,34 @@ available on homebrew:
 brew install krshrimali/context-pilot/context-pilot
 ```
 
-Once done, please make sure that `contextpilot --help` works on your system
-(for confidence). If users don't have homebrew, they can also build the binary
-from source, for more details - please check:
-https://github.com/krshrimali/context-pilot-rs.
+OR if using AUR, refer: https://aur.archlinux.org/packages/contextpilot.
+
+In case you are not using either of the package managers above, follow the commands below: (`cargo` installation is must)
+
+```bash
+git clone https://github.com/krshrimali/context-pilot-rs && cd context-pilot-rs
+cargo build --release
+cp ./target/release/contextpilot ~/.local/bin/
+```
+
+Feel free to replace the binary path to `/usr/local/bin` based on your system.
 
 ## Usage
 
 1. Open your workspace.
 2. Open the command palette (Ctrl+Shift+P or Cmd+Shift+P).
-3. Type `Context Pilot: Index Workspace` to index your workspace. This is
-   important step to make the querying faster.
-4. Type `Context Pilot: Line Number` to get related files for the current line.
-5. Type `Context Pilot: Current File` to get related files for the whole file.
-6. Type `Context Pilot: Get Context Files for Selected Range` to get related files
-   for the selected range.
+3. (Optional, for faster querying) - Index your workspace (`Context Pilot: Index Workspace`) - please note that, this might be slower for huge workspaces.
+4. (Optional, for faster querying) - Only index selected subdirectories (`Context Pilot: Index Subdirectories`) - select the subfolders you want to index, faster for huge workspaces (like monorepos).
+5. Run `Context Pilot: Current File` to get related files for the current file. Can be slower for huge files (>10k-20k LoCs).
+6. Run `Context Pilot: Get Relevant Commits` on a selected piece of code to fetch relevant commits.
+7. Run `Context Pilot: Get Context Files for Selected Range` on a selected piece of code to fetch relevant files.
 
 # ContextPilot 🧠
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **ContextPilot** is a powerful VSCode extension to understand the context of your codebase quickly!  
-It lets you find related files, top authors, and historical context **directly from Git blame** and **file relationships** — without leaving your editor.
+It lets you find related files, top authors, and historical context **directly from Git history** and **file relationships** — without leaving your editor.
 
 ---
 
@@ -51,12 +57,13 @@ It lets you find related files, top authors, and historical context **directly f
 
 ### 2. Commands
 
-| Command | Description |
-| :--- | :--- |
-| `Context Pilot: Line Number` | Get related files for the current line. |
-| `Context Pilot: Current File` | Get related files for the whole file. |
-| `Context Pilot: Get Context Files for Selected Range` | Get related files for the selected range. |
-| `ContextPilot: Index Workspace` | Index your project for faster querying (necessary). |
+| Step | Action                                                  | Description                                                                                 | Notes                                                  |
+|------|---------------------------------------------------------|---------------------------------------------------------------------------------------------|--------------------------------------------------------|
+| 3    | **Index Workspace**                                     | Index the entire workspace for faster querying.                                             | Slower for large workspaces.                          |
+| 4    | **Index Subdirectories**                                | Index only selected subdirectories for faster querying.                                     | Recommended for large workspaces or monorepos.        |
+| 5    | **Run `Context Pilot: Current File`**                   | Get related files for the currently opened file.                                            | May be slower for large files (>10k–20k LoCs).        |
+| 6    | **Run `Context Pilot: Get Relevant Commits`**           | Fetch relevant commits for a selected piece of code.                                        | Useful for tracing history of specific code sections. |
+| 7    | **Run `Context Pilot: Get Context Files for Selected Range`** | Fetch relevant files based on the selected code range.                                     | Helps understand code dependencies.                   |
 
 > ⚡ These commands can be triggered via the Command Palette (`Ctrl+Shift+P`) by typing `Context Pilot`.
 
@@ -81,19 +88,7 @@ npm install && npm run compile
 vsce package
 ```
 
-Once done, you can install this extension from VSIX file generated (ctrl/cmd + shift + P -> install extension from VSIX file).
-
----
-
-## 📜 License
-
-This project is licensed under the [MIT License](LICENSE).
-
-**Note:**  
-You are free to use, modify, and distribute this project, but **you must give proper credit** to the original author:
-
-**Kushashwa Ravi Shrimali**  
-📧 [kushashwaravishrimali@gmail.com](mailto:kushashwaravishrimali@gmail.com)
+Once done, you can install this extension from .vsix file generated (ctrl/cmd + shift + P -> install extension from VSIX file).
 
 ---
 
