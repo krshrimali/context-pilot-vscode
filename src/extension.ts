@@ -4,9 +4,52 @@ import * as path from "path";
 import * as fs from "fs";
 import ignore from "ignore";
 
+const MIN_CONTEXTPILOT_VERSION = "0.9.0";
+let cachedVersionCheck: boolean | null = null;
+
+function parseVersion(versionStr: string): [number, number, number] {
+    const match = versionStr.match(/(\d+)\.(\d+)\.(\d+)/);
+    if (!match) return [0, 0, 0];
+    return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+}
+
+function isVersionCompatible(installed: string, required: string): boolean {
+    const [imaj, imin, ipat] = parseVersion(installed);
+    const [rmaj, rmin, rpat] = parseVersion(required);
+    if (imaj !== rmaj) return imaj > rmaj;
+    if (imin !== rmin) return imin > rmin;
+    return ipat >= rpat;
+}
+
+async function checkContextPilotVersion(): Promise<boolean> {
+    return new Promise((resolve) => {
+        childProcess.exec("contextpilot --version", (error, stdout) => {
+            if (error || !stdout) {
+                vscode.window.showErrorMessage("Failed to run `contextpilot --version`. Is it installed?");
+                return resolve(false);
+            }
+
+            const match = stdout.trim().match(/contextpilot\s+(\d+\.\d+\.\d+)/);
+            if (!match) {
+                vscode.window.showErrorMessage("Unexpected version format from contextpilot.");
+                return resolve(false);
+            }
+
+            const version = match[1];
+            if (!isVersionCompatible(version, MIN_CONTEXTPILOT_VERSION)) {
+                vscode.window.showWarningMessage(
+                    `Your contextpilot version is ${version}. Please update to at least ${MIN_CONTEXTPILOT_VERSION}.`
+                );
+                return resolve(false);
+            }
+
+            return resolve(true);
+        });
+    });
+}
+
 function getAllSubdirectoriesRespectingGitignore(rootDir: string): string[] {
     let results: string[] = [];
-
     const ig = ignore();
     const gitignorePath = path.join(rootDir, ".gitignore");
 
@@ -35,16 +78,12 @@ function getAllSubdirectoriesRespectingGitignore(rootDir: string): string[] {
 
 function getCurrentWorkspacePath(): string | undefined {
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (workspaceFolders && workspaceFolders.length > 0) {
-        return workspaceFolders[0].uri.fsPath;
-    }
-    return undefined;
+    return workspaceFolders && workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
 }
 
 class CommitDescriptionProvider implements vscode.TextDocumentContentProvider {
     private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
     onDidChange = this._onDidChange.event;
-
     private contentMap = new Map<string, string>();
 
     provideTextDocumentContent(uri: vscode.Uri): string {
@@ -60,9 +99,10 @@ class CommitDescriptionProvider implements vscode.TextDocumentContentProvider {
 const commitDescriptionProvider = new CommitDescriptionProvider();
 vscode.workspace.registerTextDocumentContentProvider("commitdesc", commitDescriptionProvider);
 
-function runCommand(commandType: string, type: string) {
-    const { exec } = require("child_process");
+async function runCommand(commandType: string, type: string) {
+    if (!(await checkContextPilotVersion())) return;
 
+    const { exec } = require("child_process");
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor) {
         vscode.window.showErrorMessage("No active editor");
@@ -77,9 +117,7 @@ function runCommand(commandType: string, type: string) {
     }
 
     const options: childProcess.ExecOptions = { cwd: currentWorkspacePath };
-
-    let currentStartLine = 1;
-    let currentEndLine = 0;
+    let currentStartLine = 1, currentEndLine = 0;
 
     if (type === "line") {
         const line = activeEditor.selection.active.line + 1;
@@ -91,12 +129,7 @@ function runCommand(commandType: string, type: string) {
         currentEndLine = selection.end.line + 1;
     }
 
-    let internalCommandType = "author";
-    if (commandType === "files") {
-        internalCommandType = "query";
-    } else if (commandType === "desc") {
-        internalCommandType = "desc";
-    }
+    let internalCommandType = commandType === "files" ? "query" : commandType;
 
     const binaryPath = "contextpilot";
     const command = `${binaryPath} ${currentWorkspacePath} -t ${internalCommandType} ${currentFile} -s ${currentStartLine} -e ${currentEndLine}`;
@@ -115,7 +148,7 @@ function runCommand(commandType: string, type: string) {
         }
 
         if (commandType === "desc") {
-            let parsed: [string, string, string, string][];
+            let parsed: [string, string, string, string, string][];
             try {
                 parsed = JSON.parse(stdout.trim());
             } catch (e) {
@@ -123,19 +156,16 @@ function runCommand(commandType: string, type: string) {
                 return;
             }
 
-            parsed.sort((a, b) => {
-                const dateA = new Date(a[3]).getTime();
-                const dateB = new Date(b[3]).getTime();
-                return dateB - dateA;
-            });
+            parsed.sort((a, b) => new Date(b[3]).getTime() - new Date(a[3]).getTime());
 
-            const items = parsed.map(([title, description, author, date]) => ({
+            const items = parsed.map(([title, description, author, date, commitUrl]) => ({
                 label: title,
                 detail: `${author} • ${date}`,
                 description: description.slice(0, 80).replace(/\s+/g, " "),
                 fullDescription: description,
                 author,
                 date,
+                commitUrl
             }));
 
             vscode.window.showQuickPick(items, {
@@ -144,12 +174,10 @@ function runCommand(commandType: string, type: string) {
                 placeHolder: "Select a commit to view details",
             }).then((selected) => {
                 if (selected) {
-                    const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}`;
+                    const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}\n**Commit URL:** ${selected.commitUrl}`;
                     const safeFileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
                     const uri = vscode.Uri.parse(`commitdesc:${safeFileName}`);
-
                     commitDescriptionProvider.setContent(uri, content);
-
                     vscode.workspace.openTextDocument(uri).then((doc) => {
                         vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside, false);
                     });
@@ -161,14 +189,13 @@ function runCommand(commandType: string, type: string) {
 
         const outputFilesArray = stdout
             .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
 
-        const items = outputFilesArray.map((line) => {
+        const items = outputFilesArray.map(line => {
             const filePath = line.split(" - ")[0].trim();
             const occurrencesMatch = line.match(/- (\d+) occurrences/);
             const occurrences = occurrencesMatch ? occurrencesMatch[1] : "0";
-
             return {
                 label: filePath,
                 description: `${occurrences} occurrences`,
@@ -183,7 +210,6 @@ function runCommand(commandType: string, type: string) {
                 const selectedFilePath = selectedItem.label;
                 const fullPath = path.join(currentWorkspacePath, selectedFilePath);
                 const fileUri = vscode.Uri.file(fullPath);
-
                 vscode.workspace.openTextDocument(fileUri).then((document) => {
                     vscode.window.showTextDocument(document);
                 }, (error) => {
@@ -194,9 +220,11 @@ function runCommand(commandType: string, type: string) {
     });
 }
 
-let indexWorkspaceCommand = vscode.commands.registerCommand(
+const indexWorkspaceCommand = vscode.commands.registerCommand(
     "contextpilot.indexWorkspace",
     async () => {
+        if (!(await checkContextPilotVersion())) return;
+
         const workspacePath = getCurrentWorkspacePath();
         if (!workspacePath) {
             vscode.window.showErrorMessage("No workspace open!");
@@ -204,7 +232,6 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
         }
 
         const command = `contextpilot ${workspacePath} -t index`;
-
         const outputChannel = vscode.window.createOutputChannel("ContextPilot Logs");
         outputChannel.show(true);
 
@@ -226,13 +253,8 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
                     resolve(undefined);
                 });
 
-                cp.stdout?.on("data", (data) => {
-                    outputChannel.appendLine(`[stdout] ${data.toString()}`);
-                });
-
-                cp.stderr?.on("data", (data) => {
-                    outputChannel.appendLine(`[stderr] ${data.toString()}`);
-                });
+                cp.stdout?.on("data", data => outputChannel.appendLine(`[stdout] ${data.toString()}`));
+                cp.stderr?.on("data", data => outputChannel.appendLine(`[stderr] ${data.toString()}`));
             });
         });
     }
@@ -241,6 +263,8 @@ let indexWorkspaceCommand = vscode.commands.registerCommand(
 const indexSubdirectoriesCommand = vscode.commands.registerCommand(
     "contextpilot.indexSubdirectories",
     async () => {
+        if (!(await checkContextPilotVersion())) return;
+
         const workspacePath = getCurrentWorkspacePath();
         if (!workspacePath) {
             vscode.window.showErrorMessage("No workspace open!");
@@ -290,13 +314,8 @@ const indexSubdirectoriesCommand = vscode.commands.registerCommand(
                     resolve(undefined);
                 });
 
-                cp.stdout?.on("data", (data) => {
-                    outputChannel.appendLine(`[stdout] ${data.toString()}`);
-                });
-
-                cp.stderr?.on("data", (data) => {
-                    outputChannel.appendLine(`[stderr] ${data.toString()}`);
-                });
+                cp.stdout?.on("data", data => outputChannel.appendLine(`[stdout] ${data.toString()}`));
+                cp.stderr?.on("data", data => outputChannel.appendLine(`[stderr] ${data.toString()}`));
             });
         });
     }
@@ -304,27 +323,15 @@ const indexSubdirectoriesCommand = vscode.commands.registerCommand(
 
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
-        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => {
-            runCommand("files", "line");
-        }),
-        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentFile", () => {
-            runCommand("files", "file");
-        }),
-        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentRange", () => {
-            runCommand("files", "range");
-        }),
-        vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentLineNumber", () => {
-            runCommand("authors", "line");
-        }),
-        vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentFile", () => {
-            runCommand("authors", "file");
-        }),
-        vscode.commands.registerCommand("contextpilot.getContextDescriptions", () => {
-            runCommand("desc", "range");
-        }),
+        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => runCommand("files", "line")),
+        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentFile", () => runCommand("files", "file")),
+        vscode.commands.registerCommand("contextpilot.getContextFilesCurrentRange", () => runCommand("files", "range")),
+        vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentLineNumber", () => runCommand("authors", "line")),
+        vscode.commands.registerCommand("contextpilot.getContextAuthorsCurrentFile", () => runCommand("authors", "file")),
+        vscode.commands.registerCommand("contextpilot.getContextDescriptions", () => runCommand("desc", "range")),
         indexWorkspaceCommand,
         indexSubdirectoriesCommand
     );
 }
 
-export function deactivate() { }
+export function deactivate() {}
