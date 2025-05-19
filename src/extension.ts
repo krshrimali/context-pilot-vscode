@@ -115,7 +115,7 @@ function runCommand(commandType: string, type: string) {
         }
 
         if (commandType === "desc") {
-            let parsed: [string, string, string, string][];
+            let parsed: [string, string, string, string, string][];
             try {
                 parsed = JSON.parse(stdout.trim());
             } catch (e) {
@@ -129,13 +129,14 @@ function runCommand(commandType: string, type: string) {
                 return dateB - dateA;
             });
 
-            const items = parsed.map(([title, description, author, date]) => ({
+            const items = parsed.map(([title, description, author, date, commitUrl]) => ({
                 label: title,
                 detail: `${author} • ${date}`,
                 description: description.slice(0, 80).replace(/\s+/g, " "),
                 fullDescription: description,
                 author,
                 date,
+                commitUrl
             }));
 
             vscode.window.showQuickPick(items, {
@@ -144,7 +145,7 @@ function runCommand(commandType: string, type: string) {
                 placeHolder: "Select a commit to view details",
             }).then((selected) => {
                 if (selected) {
-                    const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}`;
+                    const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}\n**Commit URL:** ${selected.commitUrl}`;
                     const safeFileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
                     const uri = vscode.Uri.parse(`commitdesc:${safeFileName}`);
 
