@@ -4,7 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import ignore from "ignore";
 
-const MIN_CONTEXTPILOT_VERSION = "0.5.0";
+const MIN_CONTEXTPILOT_VERSION = "0.9.0";
 let cachedVersionCheck: boolean | null = null;
 
 function parseVersion(versionStr: string): [number, number, number] {
