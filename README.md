@@ -101,7 +101,6 @@ Feel free to open an issue or suggest features.
 
 ## 📬 Contact
 
-- Email: [kushashwaravishrimali@gmail.com](mailto:kushashwaravishrimali@gmail.com)
 - GitHub: [@krshrimali](https://github.com/krshrimali)
 
 ---
