@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "0.9.0",
+    "version": "1.1.7",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
@@ -11,7 +11,14 @@
         "Other"
     ],
     "activationEvents": [
-        "onLanguage"
+        "onCommand:contextpilot.getContextFilesCurrentLineNumber",
+        "onCommand:contextpilot.getContextFilesCurrentFile",
+        "onCommand:contextpilot.indexWorkspace",
+        "onCommand:contextpilot.getContextFilesCurrentRange",
+        "onCommand:contextpilot.getContextDescriptions",
+        "onCommand:contextpilot.indexSubdirectories",
+        "onCommand:contextpilot.analyzeCommitsWithLLM",
+        "onCommand:contextpilot.generateDiffsForCursorChat"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -39,9 +46,31 @@
             {
                 "command": "contextpilot.indexSubdirectories",
                 "title": "ContextPilot: Index Subdirectories"
+            },
+            {
+                "command": "contextpilot.analyzeCommitsWithLLM",
+                "title": "ContextPilot: Analyze Commits with LLM"
+            },
+            {
+                "command": "contextpilot.generateDiffsForCursorChat",
+                "title": "ContextPilot: Generate Diffs for Cursor Chat"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "ContextPilot",
+            "properties": {
+                "contextpilot.openaiApiKey": {
+                    "type": "string",
+                    "default": "",
+                    "description": "OpenAI API Key for commit analysis"
+                }
+            }
+        }
     },
+    "extensionDependencies": [
+        "GitHub.copilot",
+        "GitHub.copilot-chat"
+    ],
     "scripts": {
         "vscode:prepublish": "npm run package",
         "compile": "webpack",
