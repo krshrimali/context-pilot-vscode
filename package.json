@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "1.1.7",
+    "version": "1.1.8",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
@@ -48,12 +48,8 @@
                 "title": "ContextPilot: Index Subdirectories"
             },
             {
-                "command": "contextpilot.analyzeCommitsWithLLM",
-                "title": "ContextPilot: Analyze Commits with LLM"
-            },
-            {
-                "command": "contextpilot.generateDiffsForCursorChat",
-                "title": "ContextPilot: Generate Diffs for Cursor Chat"
+                "command": "contextpilot.generateDiffsForAI",
+                "title": "ContextPilot: Generate Diffs for AI Chat"
             }
         ],
         "configuration": {
@@ -84,6 +80,7 @@
     },
     "devDependencies": {
         "@types/glob": "^8.1.0",
+        "@types/jest": "^29.5.14",
         "@types/mocha": "^10.0.10",
         "@types/node": "20.2.5",
         "@types/vscode": "^1.79.0",
