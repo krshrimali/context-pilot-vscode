@@ -8,7 +8,9 @@ const MIN_CONTEXTPILOT_VERSION = "0.9.0";
 let cachedVersionCheck: boolean | null = null;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
+let gitWatcher: vscode.FileSystemWatcher | undefined;
 
+// Helper functions
 function parseVersion(versionStr: string): [number, number, number] {
     const match = versionStr.match(/(\d+)\.(\d+)\.(\d+)/);
     if (!match) return [0, 0, 0];
@@ -690,6 +692,42 @@ async function generateDiffsForCursorChat() {
     });
 }
 
+function setupGitWatcher() {
+    const config = vscode.workspace.getConfiguration('contextpilot');
+    const autoIndexOnCommit = config.get<boolean>('autoIndexOnGitCommit');
+
+    if (!autoIndexOnCommit) {
+        if (gitWatcher) {
+            gitWatcher.dispose();
+            gitWatcher = undefined;
+        }
+        return;
+    }
+
+    // Watch for changes in the .git/refs/heads directory
+    const workspacePath = getCurrentWorkspacePath();
+    if (!workspacePath) return;
+
+    const gitRefsPath = path.join(workspacePath, '.git', 'refs', 'heads');
+    if (!fs.existsSync(gitRefsPath)) return;
+
+    gitWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(vscode.Uri.file(gitRefsPath), '**/*'),
+        false, // ignoreCreateEvents
+        false, // ignoreChangeEvents
+        false  // ignoreDeleteEvents
+    );
+
+    gitWatcher.onDidChange(async (uri) => {
+        outputChannel.appendLine(`[INFO] Git commit detected, triggering workspace indexing`);
+        try {
+            await vscode.commands.executeCommand("contextpilot.indexWorkspace");
+        } catch (error) {
+            outputChannel.appendLine(`[ERROR] Failed to index workspace after Git commit: ${error}`);
+        }
+    });
+}
+
 export function activate(context: vscode.ExtensionContext) {
     // Create output channel
     outputChannel = vscode.window.createOutputChannel("ContextPilot");
@@ -702,6 +740,18 @@ export function activate(context: vscode.ExtensionContext) {
     statusBarItem.command = "contextpilot.showCommands";
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
+
+    // Set up Git watcher
+    setupGitWatcher();
+
+    // Watch for configuration changes
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('contextpilot.autoIndexOnGitCommit')) {
+                setupGitWatcher();
+            }
+        })
+    );
 
     // Register command to show available commands
     context.subscriptions.push(
@@ -766,4 +816,9 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
-export function deactivate() {}
+export function deactivate() {
+    if (gitWatcher) {
+        gitWatcher.dispose();
+        gitWatcher = undefined;
+    }
+}

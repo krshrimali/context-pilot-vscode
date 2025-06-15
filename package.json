@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "1.2.1",
+    "version": "1.2.3",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
@@ -59,6 +59,12 @@
                     "type": "string",
                     "default": "",
                     "description": "OpenAI API Key for commit analysis"
+                },
+                "contextpilot.autoIndexOnGitCommit": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically trigger workspace indexing when a Git commit is made",
+                    "scope": "resource"
                 }
             }
         }
