@@ -7,6 +7,7 @@ import ignore from "ignore";
 const MIN_CONTEXTPILOT_VERSION = "0.9.0";
 let cachedVersionCheck: boolean | null = null;
 let outputChannel: vscode.OutputChannel;
+let statusBarItem: vscode.StatusBarItem;
 
 function parseVersion(versionStr: string): [number, number, number] {
     const match = versionStr.match(/(\d+)\.(\d+)\.(\d+)/);
@@ -27,33 +28,70 @@ async function checkContextPilotVersion(): Promise<boolean> {
         return cachedVersionCheck;
     }
 
+    // Common installation paths to check
+    const possiblePaths = [
+        "contextpilot", // Check PATH
+        "~/.local/bin/contextpilot",
+        "~/.cargo/bin/contextpilot",
+        "/usr/local/bin/contextpilot",
+        "/usr/bin/contextpilot"
+    ];
+
+    // Expand home directory in paths
+    const expandedPaths = possiblePaths.map(p => p.replace("~", process.env.HOME || ""));
+
     return new Promise((resolve) => {
-        childProcess.exec("contextpilot --version", (error, stdout) => {
-            if (error || !stdout) {
-                vscode.window.showErrorMessage("Failed to run `contextpilot --version`. Is it installed?");
+        // Try each path until we find the binary
+        const tryNextPath = (index: number) => {
+            if (index >= expandedPaths.length) {
+                const errorMessage = `ContextPilot binary not found. Please install it using one of these methods:
+1. Download from GitHub releases and add to PATH
+2. Install via cargo: cargo install contextpilot
+3. Copy binary to one of these locations:
+   - ~/.local/bin/
+   - ~/.cargo/bin/
+   - /usr/local/bin/
+   - /usr/bin/`;
+                
+                outputChannel.appendLine(`[ERROR] ${errorMessage}`);
+                vscode.window.showErrorMessage("ContextPilot binary not found. Check output panel for installation instructions.");
                 cachedVersionCheck = false;
                 return resolve(false);
             }
 
-            const match = stdout.trim().match(/contextpilot\s+(\d+\.\d+\.\d+)/);
-            if (!match) {
-                vscode.window.showErrorMessage("Unexpected version format from contextpilot.");
-                cachedVersionCheck = false;
-                return resolve(false);
-            }
+            const path = expandedPaths[index];
+            childProcess.exec(`${path} --version`, (error, stdout) => {
+                if (error || !stdout) {
+                    // Try next path
+                    tryNextPath(index + 1);
+                    return;
+                }
 
-            const version = match[1];
-            if (!isVersionCompatible(version, MIN_CONTEXTPILOT_VERSION)) {
-                vscode.window.showWarningMessage(
-                    `Your contextpilot version is ${version}. Please update to at least ${MIN_CONTEXTPILOT_VERSION}.`
-                );
-                cachedVersionCheck = false;
-                return resolve(false);
-            }
+                const match = stdout.trim().match(/contextpilot\s+(\d+\.\d+\.\d+)/);
+                if (!match) {
+                    outputChannel.appendLine(`[ERROR] Unexpected version format from contextpilot at ${path}`);
+                    vscode.window.showErrorMessage("Unexpected version format from contextpilot.");
+                    cachedVersionCheck = false;
+                    return resolve(false);
+                }
 
-            cachedVersionCheck = true;
-            return resolve(true);
-        });
+                const version = match[1];
+                if (!isVersionCompatible(version, MIN_CONTEXTPILOT_VERSION)) {
+                    const message = `Your contextpilot version is ${version}. Please update to at least ${MIN_CONTEXTPILOT_VERSION}.`;
+                    outputChannel.appendLine(`[WARN] ${message}`);
+                    vscode.window.showWarningMessage(message);
+                    cachedVersionCheck = false;
+                    return resolve(false);
+                }
+
+                outputChannel.appendLine(`[INFO] Found contextpilot v${version} at ${path}`);
+                cachedVersionCheck = true;
+                return resolve(true);
+            });
+        };
+
+        // Start checking paths
+        tryNextPath(0);
     });
 }
 
@@ -174,15 +212,17 @@ async function runCommand(commandType: string, type: string) {
     const binaryPath = "contextpilot";
     const command = `${binaryPath} ${currentWorkspacePath} -t ${internalCommandType} ${currentFile} -s ${currentStartLine} -e ${currentEndLine}`;
 
-    vscode.window.showInformationMessage("Running command: " + command);
+    outputChannel.appendLine(`[INFO] Running command: ${command}`);
 
     exec(command, options, (error: any, stdout: string, stderr: string) => {
         if (error) {
+            outputChannel.appendLine(`[ERROR] Command failed: ${error.message}`);
             vscode.window.showErrorMessage("Error: " + error.message);
             return;
         }
 
         if (stderr.length > 0 && !stdout) {
+            outputChannel.appendLine(`[ERROR] Command stderr: ${stderr}`);
             vscode.window.showErrorMessage("stderr: " + stderr);
             return;
         }
@@ -191,7 +231,9 @@ async function runCommand(commandType: string, type: string) {
             let parsed: [string, string, string, string, string][];
             try {
                 parsed = JSON.parse(stdout.trim());
+                outputChannel.appendLine(`[INFO] Successfully parsed ${parsed.length} commit descriptions`);
             } catch (e) {
+                outputChannel.appendLine(`[ERROR] Failed to parse commit descriptions: ${e}`);
                 vscode.window.showErrorMessage("Failed to parse commit descriptions");
                 return;
             }
@@ -214,6 +256,7 @@ async function runCommand(commandType: string, type: string) {
                 placeHolder: "Select a commit to view details",
             }).then((selected) => {
                 if (selected) {
+                    outputChannel.appendLine(`[INFO] Selected commit: ${selected.label}`);
                     const content = `# ${selected.label}\n\n${selected.fullDescription}\n\n---\n**Author:** ${selected.author}\n**Date:** ${selected.date}\n**Commit URL:** ${selected.commitUrl}`;
                     const safeFileName = selected.label.slice(0, 20).replace(/[^\w\d\-_.]/g, "_");
                     const uri = vscode.Uri.parse(`commitdesc:${safeFileName}`);
@@ -232,6 +275,8 @@ async function runCommand(commandType: string, type: string) {
             .map(line => line.trim())
             .filter(line => line.length > 0);
 
+        outputChannel.appendLine(`[INFO] Found ${outputFilesArray.length} related files`);
+
         const items = outputFilesArray.map(line => {
             const filePath = line.split(" - ")[0].trim();
             const occurrencesMatch = line.match(/- (\d+) occurrences/);
@@ -247,12 +292,14 @@ async function runCommand(commandType: string, type: string) {
             placeHolder: "Select a related file from ContextPilot",
         }).then((selectedItem) => {
             if (selectedItem) {
+                outputChannel.appendLine(`[INFO] Selected file: ${selectedItem.label}`);
                 const selectedFilePath = selectedItem.label;
                 const fullPath = path.join(currentWorkspacePath, selectedFilePath);
                 const fileUri = vscode.Uri.file(fullPath);
                 vscode.workspace.openTextDocument(fileUri).then((document) => {
                     vscode.window.showTextDocument(document);
                 }, (error) => {
+                    outputChannel.appendLine(`[ERROR] Failed to open file: ${error.message}`);
                     vscode.window.showErrorMessage("Failed to open file: " + error.message);
                 });
             }
@@ -272,29 +319,56 @@ const indexWorkspaceCommand = vscode.commands.registerCommand(
         }
 
         const command = `contextpilot ${workspacePath} -t index`;
-        const outputChannel = vscode.window.createOutputChannel("ContextPilot Logs");
-        outputChannel.show(true);
+        outputChannel.appendLine(`[INFO] Starting workspace indexing`);
+        outputChannel.appendLine(`[INFO] Command: ${command}`);
+
+        let filesIndexed = 0;
+
+        // Update status bar to show indexing in progress
+        statusBarItem.text = "$(sync~spin) ContextPilot: Indexing...";
+        statusBarItem.show();
 
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "ContextPilot: Indexing Workspace",
             cancellable: false
-        }, async () => {
-            return new Promise((resolve, reject) => {
-                const cp = childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
+        }, async (progress: vscode.Progress<{ message?: string; increment?: number }>) => {
+            return new Promise<void>((resolve, reject) => {
+                const cp = childProcess.exec(command, { cwd: workspacePath }, (error: childProcess.ExecException | null, stdout: string, stderr: string) => {
                     if (error) {
+                        outputChannel.appendLine(`[ERROR] Indexing failed: ${error.message}`);
                         vscode.window.showErrorMessage(`ContextPilot Indexing Failed ❌: ${error.message}`);
-                        outputChannel.appendLine(`[ERROR] ${error.message}`);
+                        statusBarItem.text = "$(error) ContextPilot: Indexing Failed";
+                        setTimeout(() => {
+                            statusBarItem.text = "$(search) ContextPilot";
+                        }, 3000);
                         reject(error);
                         return;
                     }
-                    vscode.window.showInformationMessage("ContextPilot: Indexing completed successfully ✅");
-                    outputChannel.appendLine("[INFO] Indexing completed successfully ✅");
-                    resolve(undefined);
+                    outputChannel.appendLine(`[INFO] Indexing completed successfully (${filesIndexed} files indexed)`);
+                    vscode.window.showInformationMessage(`ContextPilot: Indexing completed successfully ✅ (${filesIndexed} files indexed)`);
+                    
+                    // Show completion status temporarily
+                    statusBarItem.text = "$(check) ContextPilot: Indexing Done";
+                    setTimeout(() => {
+                        statusBarItem.text = "$(search) ContextPilot";
+                    }, 3000);
+                    
+                    resolve();
                 });
 
-                cp.stdout?.on("data", data => outputChannel.appendLine(`[stdout] ${data.toString()}`));
-                cp.stderr?.on("data", data => outputChannel.appendLine(`[stderr] ${data.toString()}`));
+                cp.stdout?.on("data", (data: string) => {
+                    const output = data.toString();
+                    outputChannel.appendLine(`[stdout] ${output}`);
+                    
+                    // Count files being indexed
+                    const fileMatches = output.match(/Indexing file:/g);
+                    if (fileMatches) {
+                        filesIndexed += fileMatches.length;
+                        progress.report({ message: `${filesIndexed} files indexed` });
+                    }
+                });
+                cp.stderr?.on("data", (data: string) => outputChannel.appendLine(`[stderr] ${data.toString()}`));
             });
         });
     }
@@ -452,183 +526,6 @@ async function getCopilotResponse(prompt: string, maxRetries: number = 3): Promi
     throw new Error('Failed to get response after multiple attempts');
 }
 
-async function analyzeCommitsWithLLM() {
-    if (!(await checkContextPilotVersion())) return;
-
-    // Check if Copilot is available
-    if (!(await isCopilotAvailable())) {
-        const installCopilot = await vscode.window.showWarningMessage(
-            'GitHub Copilot is required for this feature. Would you like to install it?',
-            'Install Copilot',
-            'Cancel'
-        );
-        
-        if (installCopilot === 'Install Copilot') {
-            await vscode.commands.executeCommand('workbench.extensions.installExtension', 'GitHub.copilot');
-            vscode.window.showInformationMessage('Please sign in to GitHub Copilot after installation.');
-        }
-        return;
-    }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-        vscode.window.showErrorMessage("No active editor");
-        return;
-    }
-
-    // Make sure we're not in an untitled file
-    if (activeEditor.document.isUntitled) {
-        vscode.window.showErrorMessage("Please save the file before analyzing commits");
-        return;
-    }
-
-    const currentFile = activeEditor.document.uri.fsPath;
-    const currentWorkspacePath = getCurrentWorkspacePath();
-    if (!currentWorkspacePath) {
-        vscode.window.showErrorMessage("No workspace open");
-        return;
-    }
-
-    // Get the current selection or use the whole file
-    let currentStartLine = 1;
-    let currentEndLine = activeEditor.document.lineCount;
-    let isSelection = false;
-
-    if (activeEditor.selection && !activeEditor.selection.isEmpty) {
-        currentStartLine = activeEditor.selection.start.line + 1;
-        currentEndLine = activeEditor.selection.end.line + 1;
-        isSelection = true;
-    }
-
-    // Show progress indicator
-    await vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: `Analyzing commits for ${isSelection ? 'selected code' : 'current file'}...`,
-        cancellable: false
-    }, async (progress) => {
-        progress.report({ increment: 0 });
-
-        // First get the commit descriptions
-        const command = `contextpilot ${currentWorkspacePath} -t desc ${currentFile} -s ${currentStartLine} -e ${currentEndLine}`;
-        
-        return new Promise<void>((resolve, reject) => {
-            childProcess.exec(command, { cwd: currentWorkspacePath }, async (error, stdout, stderr) => {
-                if (error) {
-                    vscode.window.showErrorMessage("Error: " + error.message);
-                    reject(error);
-                    return;
-                }
-
-                if (stderr.length > 0 && !stdout) {
-                    vscode.window.showErrorMessage("stderr: " + stderr);
-                    reject(new Error(stderr));
-                    return;
-                }
-
-                let parsed: [string, string, string, string, string][];
-                try {
-                    parsed = JSON.parse(stdout.trim());
-                } catch (e) {
-                    vscode.window.showErrorMessage("Failed to parse commit descriptions");
-                    reject(e);
-                    return;
-                }
-
-                progress.report({ increment: 30 });
-
-                // Get git diff for each commit
-                const commitDiffs: string[] = [];
-                for (const [hash, , , , ] of parsed) {
-                    try {
-                        const diffCommand = `git show ${hash} -- ${currentFile}`;
-                        const diffOutput = await new Promise<string>((resolve, reject) => {
-                            childProcess.exec(diffCommand, { cwd: currentWorkspacePath }, (error, stdout, stderr) => {
-                                if (error) reject(error);
-                                else resolve(stdout);
-                            });
-                        });
-                        commitDiffs.push(diffOutput);
-                    } catch (e) {
-                        console.error(`Failed to get diff for commit ${hash}:`, e);
-                    }
-                }
-
-                progress.report({ increment: 30 });
-
-                // Create a chat window with the context
-                const chatDoc = await vscode.workspace.openTextDocument({
-                    content: `# Commit History Chat\n\nI've analyzed the commit history for this file. You can ask me questions about the changes, and I'll use the commit diffs as context to answer.\n\nContext loaded from ${parsed.length} commits.\n\n---\n\n`,
-                    language: 'markdown'
-                });
-
-                const chatEditor = await vscode.window.showTextDocument(chatDoc, {
-                    preview: false,
-                    viewColumn: vscode.ViewColumn.Beside
-                });
-
-                // Initialize chat history
-                const chatHistory: { role: 'user' | 'assistant', content: string }[] = [];
-
-                // Register keybinding for Enter key
-                const enterKeyDisposable = vscode.commands.registerCommand('type', async (args) => {
-                    if (vscode.window.activeTextEditor?.document === chatDoc) {
-                        if (args.text === '\n') {
-                            const position = vscode.window.activeTextEditor.selection.active;
-                            const line = vscode.window.activeTextEditor.document.lineAt(position.line);
-                            
-                            // If the current line starts with '>', process it as a question
-                            if (line.text.startsWith('>')) {
-                                const question = line.text.substring(1).trim();
-                                if (question) {
-                                    try {
-                                        // Add user message to chat history
-                                        chatHistory.push({
-                                            role: 'user',
-                                            content: question
-                                        });
-                                        
-                                        // Create a temporary document for Copilot
-                                        const tempDoc = await vscode.workspace.openTextDocument({
-                                            content: `Here are the relevant git diffs for analysis:\n\n${commitDiffs.join('\n\n')}\n\nQuestion: ${question}`,
-                                            language: 'markdown'
-                                        });
-                                        
-                                        // Get response from Copilot
-                                        const response = await getCopilotResponse(tempDoc.getText());
-                                        
-                                        // Add the response to our chat window
-                                        const edit = new vscode.WorkspaceEdit();
-                                        edit.insert(chatDoc.uri, new vscode.Position(position.line + 1, 0), 
-                                            `\n\n${response}\n\n---\n\n`);
-                                        await vscode.workspace.applyEdit(edit);
-                                        
-                                        // Close the temporary document
-                                        await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                                    } catch (error) {
-                                        vscode.window.showErrorMessage(`Failed to generate response: ${error instanceof Error ? error.message : String(error)}`);
-                                    }
-                                }
-                            }
-                        }
-                        // Always insert the newline
-                        return vscode.commands.executeCommand('default:type', args);
-                    }
-                });
-
-                // Clean up when the editor is closed
-                vscode.window.onDidChangeActiveTextEditor(editor => {
-                    if (editor?.document !== chatDoc) {
-                        enterKeyDisposable.dispose();
-                    }
-                });
-
-                progress.report({ increment: 40 });
-                resolve();
-            });
-        });
-    });
-}
-
 async function generateDiffsForCursorChat() {
     if (!(await checkContextPilotVersion())) return;
 
@@ -651,8 +548,7 @@ async function generateDiffsForCursorChat() {
         return;
     }
 
-    // Show the output channel
-    outputChannel.show(true);
+    // Create output channel but don't show it automatically
     outputChannel.clear();
     outputChannel.appendLine("Starting diff generation process...");
     outputChannel.appendLine(`Current file: ${currentFile}`);
@@ -799,6 +695,61 @@ export function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ContextPilot");
     context.subscriptions.push(outputChannel);
 
+    // Create status bar item
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    statusBarItem.text = "$(search) ContextPilot";
+    statusBarItem.tooltip = "ContextPilot Commands";
+    statusBarItem.command = "contextpilot.showCommands";
+    statusBarItem.show();
+    context.subscriptions.push(statusBarItem);
+
+    // Register command to show available commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand("contextpilot.showCommands", () => {
+            const commands = [
+                { label: "Index Workspace", command: "contextpilot.indexWorkspace" },
+                { label: "Index Subdirectories", command: "contextpilot.indexSubdirectories" },
+                { label: "Get Context Files (Current Line)", command: "contextpilot.getContextFilesCurrentLineNumber" },
+                { label: "Get Context Files (Current File)", command: "contextpilot.getContextFilesCurrentFile" },
+                { label: "Get Context Files (Selected Range)", command: "contextpilot.getContextFilesCurrentRange" },
+                { label: "Get Relevant Commits", command: "contextpilot.getContextDescriptions" },
+                { label: "Generate Diffs for Cursor Chat", command: "contextpilot.generateDiffsForCursorChat" }
+            ];
+
+            vscode.window.showQuickPick(commands, {
+                placeHolder: "Select a ContextPilot command"
+            }).then(selected => {
+                if (selected) {
+                    vscode.commands.executeCommand(selected.command);
+                }
+            });
+        })
+    );
+
+    // Function to start indexing
+    const startIndexing = async () => {
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+            try {
+                await vscode.commands.executeCommand("contextpilot.indexWorkspace");
+            } catch (error) {
+                console.error("Failed to start indexing:", error);
+            }
+        }
+    };
+
+    // Register workspace open event listener
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeWorkspaceFolders(async (event: vscode.WorkspaceFoldersChangeEvent) => {
+            if (event.added.length > 0) {
+                // Wait a bit for the workspace to be fully loaded
+                setTimeout(startIndexing, 2000);
+            }
+        })
+    );
+
+    // Start indexing when extension is activated
+    setTimeout(startIndexing, 2000);
+
     context.subscriptions.push(
         vscode.commands.registerCommand("contextpilot.getContextFilesCurrentLineNumber", () => runCommand("files", "line")),
         vscode.commands.registerCommand("contextpilot.getContextFilesCurrentFile", () => runCommand("files", "file")),
@@ -808,10 +759,6 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("contextpilot.getContextDescriptions", () => runCommand("desc", "range")),
         indexWorkspaceCommand,
         indexSubdirectoriesCommand,
-        vscode.commands.registerCommand(
-            "contextpilot.analyzeCommitsWithLLM",
-            analyzeCommitsWithLLM
-        ),
         vscode.commands.registerCommand(
             "contextpilot.generateDiffsForCursorChat",
             generateDiffsForCursorChat

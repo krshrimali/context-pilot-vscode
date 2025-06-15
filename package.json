@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "1.1.7",
+    "version": "1.2.1",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
@@ -11,13 +11,13 @@
         "Other"
     ],
     "activationEvents": [
+        "onStartupFinished",
         "onCommand:contextpilot.getContextFilesCurrentLineNumber",
         "onCommand:contextpilot.getContextFilesCurrentFile",
         "onCommand:contextpilot.indexWorkspace",
         "onCommand:contextpilot.getContextFilesCurrentRange",
         "onCommand:contextpilot.getContextDescriptions",
         "onCommand:contextpilot.indexSubdirectories",
-        "onCommand:contextpilot.analyzeCommitsWithLLM",
         "onCommand:contextpilot.generateDiffsForCursorChat"
     ],
     "main": "./dist/extension.js",
@@ -46,10 +46,6 @@
             {
                 "command": "contextpilot.indexSubdirectories",
                 "title": "ContextPilot: Index Subdirectories"
-            },
-            {
-                "command": "contextpilot.analyzeCommitsWithLLM",
-                "title": "ContextPilot: Analyze Commits with LLM"
             },
             {
                 "command": "contextpilot.generateDiffsForCursorChat",
