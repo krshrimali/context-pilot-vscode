@@ -8,7 +8,7 @@ const MIN_CONTEXTPILOT_VERSION = "0.9.0";
 let cachedVersionCheck: boolean | null = null;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
-let gitWatcher: vscode.FileSystemWatcher | undefined;
+let gitWatchers: vscode.FileSystemWatcher[] = [];
 
 // Helper functions
 function parseVersion(versionStr: string): [number, number, number] {
@@ -697,35 +697,50 @@ function setupGitWatcher() {
     const autoIndexOnCommit = config.get<boolean>('autoIndexOnGitCommit');
 
     if (!autoIndexOnCommit) {
-        if (gitWatcher) {
-            gitWatcher.dispose();
-            gitWatcher = undefined;
+        if (gitWatchers.length > 0) {
+            gitWatchers.forEach(watcher => watcher.dispose());
+            gitWatchers = [];
         }
         return;
     }
 
-    // Watch for changes in the .git/refs/heads directory
+    // Watch for changes in both .git/HEAD and .git/refs/heads
     const workspacePath = getCurrentWorkspacePath();
     if (!workspacePath) return;
 
-    const gitRefsPath = path.join(workspacePath, '.git', 'refs', 'heads');
-    if (!fs.existsSync(gitRefsPath)) return;
+    const gitPath = path.join(workspacePath, '.git');
+    if (!fs.existsSync(gitPath)) return;
 
-    gitWatcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(vscode.Uri.file(gitRefsPath), '**/*'),
+    // Watch HEAD file
+    const headWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(vscode.Uri.file(gitPath), 'HEAD'),
         false, // ignoreCreateEvents
         false, // ignoreChangeEvents
         false  // ignoreDeleteEvents
     );
 
-    gitWatcher.onDidChange(async (uri) => {
-        outputChannel.appendLine(`[INFO] Git commit detected, triggering workspace indexing`);
+    // Watch refs/heads directory
+    const refsWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(vscode.Uri.file(gitPath), 'refs/heads/**/*'),
+        false, // ignoreCreateEvents
+        false, // ignoreChangeEvents
+        false  // ignoreDeleteEvents
+    );
+
+    const handleGitChange = async (uri: vscode.Uri) => {
+        outputChannel.appendLine(`[INFO] Git change detected in ${uri.fsPath}, triggering workspace indexing`);
         try {
             await vscode.commands.executeCommand("contextpilot.indexWorkspace");
         } catch (error) {
-            outputChannel.appendLine(`[ERROR] Failed to index workspace after Git commit: ${error}`);
+            outputChannel.appendLine(`[ERROR] Failed to index workspace after Git change: ${error}`);
         }
-    });
+    };
+
+    headWatcher.onDidChange(handleGitChange);
+    refsWatcher.onDidChange(handleGitChange);
+
+    // Store both watchers
+    gitWatchers = [headWatcher, refsWatcher];
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -817,8 +832,8 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    if (gitWatcher) {
-        gitWatcher.dispose();
-        gitWatcher = undefined;
+    if (gitWatchers.length > 0) {
+        gitWatchers.forEach(watcher => watcher.dispose());
+        gitWatchers = [];
     }
 }
