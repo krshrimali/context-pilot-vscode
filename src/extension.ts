@@ -881,7 +881,7 @@ export function activate(context: vscode.ExtensionContext) {
                 { label: "Get Context Files (Current File)", command: "contextpilot.getContextFilesCurrentFile" },
                 { label: "Get Context Files (Selected Range)", command: "contextpilot.getContextFilesCurrentRange" },
                 { label: "Get Relevant Commits", command: "contextpilot.getContextDescriptions" },
-                { label: "Generate Diffs for Cursor Chat", command: "contextpilot.generateDiffsForCursorChat" },
+                { label: "Generate Diffs Buffer", command: "contextpilot.generateDiffsForCursorChat" },
                 { label: "Re-index Changed Files", command: "contextpilot.reindexChangedFiles" }
             ];
 
