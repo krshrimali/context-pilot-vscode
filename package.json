@@ -2,7 +2,7 @@
     "name": "contextpilot",
     "displayName": "Context Pilot",
     "description": "Get the context right at your editor with a single command",
-    "version": "1.1.7",
+    "version": "1.3.0",
     "publisher": "tgkrs",
     "engines": {
         "vscode": "^1.79.0"
@@ -11,51 +11,113 @@
         "Other"
     ],
     "activationEvents": [
-        "onCommand:contextpilot.getContextFilesCurrentLineNumber",
-        "onCommand:contextpilot.getContextFilesCurrentFile",
-        "onCommand:contextpilot.indexWorkspace",
-        "onCommand:contextpilot.getContextFilesCurrentRange",
-        "onCommand:contextpilot.getContextDescriptions",
-        "onCommand:contextpilot.indexSubdirectories",
-        "onCommand:contextpilot.analyzeCommitsWithLLM",
-        "onCommand:contextpilot.generateDiffsForCursorChat"
+        "onStartupFinished"
     ],
     "main": "./dist/extension.js",
     "contributes": {
         "commands": [
             {
+                "command": "contextpilot.showCommands",
+                "title": "Show All Commands",
+                "category": "ContextPilot"
+            },
+            {
                 "command": "contextpilot.getContextFilesCurrentLineNumber",
-                "title": "Context Pilot: Line Number"
+                "title": "Get Context Files (Current Line)",
+                "category": "ContextPilot"
             },
             {
                 "command": "contextpilot.getContextFilesCurrentFile",
-                "title": "Context Pilot: Current File"
-            },
-            {
-                "command": "contextpilot.indexWorkspace",
-                "title": "Context Pilot: Index Workspace"
+                "title": "Get Context Files (Current File)",
+                "category": "ContextPilot"
             },
             {
                 "command": "contextpilot.getContextFilesCurrentRange",
-                "title": "Context Pilot: Get Context Files for Selected Range"
+                "title": "Get Context Files (Selected Range)",
+                "category": "ContextPilot"
             },
             {
                 "command": "contextpilot.getContextDescriptions",
-                "title": "Context Pilot: Get Relevant Commits"
-            },
-            {
-                "command": "contextpilot.indexSubdirectories",
-                "title": "ContextPilot: Index Subdirectories"
-            },
-            {
-                "command": "contextpilot.analyzeCommitsWithLLM",
-                "title": "ContextPilot: Analyze Commits with LLM"
+                "title": "Get Relevant Commits",
+                "category": "ContextPilot"
             },
             {
                 "command": "contextpilot.generateDiffsForCursorChat",
-                "title": "ContextPilot: Generate Diffs for Cursor Chat"
+                "title": "Generate Diffs for Cursor Chat",
+                "category": "ContextPilot"
+            },
+            {
+                "command": "contextpilot.indexWorkspace",
+                "title": "Index Workspace",
+                "category": "ContextPilot"
+            },
+            {
+                "command": "contextpilot.reindexChangedFiles",
+                "title": "Re-index Changed Files",
+                "category": "ContextPilot"
             }
         ],
+        "menus": {
+            "editor/context": [
+                {
+                    "submenu": "contextpilot.submenu",
+                    "when": "editorTextFocus",
+                    "group": "contextpilot"
+                }
+            ]
+        },
+        "submenus": [
+            {
+                "id": "contextpilot.submenu",
+                "label": "ContextPilot"
+            }
+        ],
+        "menus": {
+            "editor/context": [
+                {
+                    "submenu": "contextpilot.submenu",
+                    "when": "editorTextFocus",
+                    "group": "contextpilot"
+                }
+            ],
+            "contextpilot.submenu": [
+                {
+                    "command": "contextpilot.getContextFilesCurrentFile",
+                    "when": "editorTextFocus && !editorHasSelection",
+                    "group": "1_files"
+                },
+                {
+                    "command": "contextpilot.getContextFilesCurrentRange",
+                    "when": "editorTextFocus && editorHasSelection",
+                    "group": "1_files"
+                },
+                {
+                    "command": "contextpilot.getContextFilesCurrentLineNumber",
+                    "when": "editorTextFocus",
+                    "group": "1_files"
+                },
+                {
+                    "command": "contextpilot.getContextDescriptions",
+                    "when": "editorTextFocus",
+                    "group": "2_commits"
+                },
+                {
+                    "command": "contextpilot.generateDiffsForCursorChat",
+                    "when": "editorTextFocus",
+                    "group": "2_commits"
+                },
+                {
+                    "command": "contextpilot.indexWorkspace",
+                    "when": "editorTextFocus",
+                    "group": "3_indexing"
+                },
+                {
+                    "command": "contextpilot.showCommands",
+                    "when": "editorTextFocus",
+                    "group": "4_other"
+                }
+            ]
+        },
         "configuration": {
             "title": "ContextPilot",
             "properties": {
@@ -63,6 +125,12 @@
                     "type": "string",
                     "default": "",
                     "description": "OpenAI API Key for commit analysis"
+                },
+                "contextpilot.autoIndexOnGitCommit": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically trigger workspace indexing when a Git commit is made",
+                    "scope": "resource"
                 }
             }
         }
