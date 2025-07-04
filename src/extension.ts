@@ -278,7 +278,7 @@ const indexWorkspaceCommand = vscode.commands.registerCommand(
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: "ContextPilot: Indexing Workspace",
-            cancellable: false
+            cancellable: true
         }, async () => {
             return new Promise((resolve, reject) => {
                 const cp = childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
