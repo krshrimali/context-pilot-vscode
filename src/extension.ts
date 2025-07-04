@@ -149,37 +149,6 @@ class CommitDescriptionProvider implements vscode.TextDocumentContentProvider {
 const commitDescriptionProvider = new CommitDescriptionProvider();
 vscode.workspace.registerTextDocumentContentProvider("commitdesc", commitDescriptionProvider);
 
-class LLMAnalysisProvider implements vscode.TextDocumentContentProvider {
-    private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
-    onDidChange = this._onDidChange.event;
-    private contentMap = new Map<string, string>();
-    private chatHistory: { role: string; content: string }[] = [];
-
-    provideTextDocumentContent(uri: vscode.Uri): string {
-        return this.contentMap.get(uri.toString()) || "";
-    }
-
-    setContent(uri: vscode.Uri, content: string) {
-        this.contentMap.set(uri.toString(), content);
-        this._onDidChange.fire(uri);
-    }
-
-    addToChatHistory(role: string, content: string) {
-        this.chatHistory.push({ role, content });
-    }
-
-    getChatHistory() {
-        return this.chatHistory;
-    }
-
-    clearChatHistory() {
-        this.chatHistory = [];
-    }
-}
-
-const llmAnalysisProvider = new LLMAnalysisProvider();
-vscode.workspace.registerTextDocumentContentProvider("llmanalysis", llmAnalysisProvider);
-
 async function runCommand(commandType: string, type: string) {
     if (!(await checkContextPilotVersion())) return;
 
