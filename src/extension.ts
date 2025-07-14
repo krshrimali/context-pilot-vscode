@@ -9,7 +9,7 @@ let cachedVersionCheck: boolean | null = null;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 let gitWatchers: vscode.FileSystemWatcher[] = [];
-let lastIndexTime: number | null = null;
+let lastIndexCommit: string | null = null;
 
 // Helper functions
 function parseVersion(versionStr: string): [number, number, number] {
@@ -279,13 +279,27 @@ async function runCommand(commandType: string, type: string) {
     });
 }
 
+async function updateLastIndexCommit(workspacePath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const command = `git rev-parse HEAD`;
+        childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            lastIndexCommit = stdout.trim();
+            resolve();
+        });
+    });
+}
+
 async function getChangedFilesSinceLastIndex(workspacePath: string): Promise<string[]> {
-    if (!lastIndexTime) {
+    if (!lastIndexCommit) {
         return [];
     }
 
     return new Promise((resolve, reject) => {
-        const command = `git diff --name-only --diff-filter=ACMRT ${lastIndexTime} HEAD`;
+        const command = `git diff --name-only --diff-filter=ACMRT ${lastIndexCommit} HEAD`;
         childProcess.exec(command, { cwd: workspacePath }, (error, stdout, stderr) => {
             if (error) {
                 reject(error);
@@ -352,8 +366,8 @@ const reindexChangedFilesCommand = vscode.commands.registerCommand(
                 }
             });
 
-            // Update last index time
-            lastIndexTime = Math.floor(Date.now() / 1000);
+            // Update last index commit to current HEAD
+            await updateLastIndexCommit(workspacePath);
 
             // Show completion status temporarily
             statusBarItem.text = "$(check) ContextPilot: Re-indexing Done";
@@ -400,7 +414,7 @@ const indexWorkspaceCommand = vscode.commands.registerCommand(
             cancellable: false
         }, async (progress: vscode.Progress<{ message?: string; increment?: number }>) => {
             return new Promise<void>((resolve, reject) => {
-                const cp = childProcess.exec(command, { cwd: workspacePath }, (error: childProcess.ExecException | null, stdout: string, stderr: string) => {
+                const cp = childProcess.exec(command, { cwd: workspacePath }, async (error: childProcess.ExecException | null, stdout: string, stderr: string) => {
                     if (error) {
                         outputChannel.appendLine(`[ERROR] Indexing failed: ${error.message}`);
                         vscode.window.showErrorMessage(`ContextPilot Indexing Failed ❌: ${error.message}`);
@@ -414,8 +428,12 @@ const indexWorkspaceCommand = vscode.commands.registerCommand(
                     outputChannel.appendLine(`[INFO] Indexing completed successfully (${filesIndexed} files indexed)`);
                     vscode.window.showInformationMessage(`ContextPilot: Indexing completed successfully ✅ (${filesIndexed} files indexed)`);
                     
-                    // Update last index time on successful indexing
-                    lastIndexTime = Math.floor(Date.now() / 1000);
+                    // Update last index commit on successful indexing
+                    try {
+                        await updateLastIndexCommit(workspacePath);
+                    } catch (commitError) {
+                        outputChannel.appendLine(`[WARN] Failed to update last index commit: ${commitError}`);
+                    }
                     
                     // Show completion status temporarily
                     statusBarItem.text = "$(check) ContextPilot: Indexing Done";
@@ -795,17 +813,29 @@ function setupGitWatcher() {
     );
 
     const handleGitChange = async (uri: vscode.Uri) => {
-        outputChannel.appendLine(`[INFO] Git change detected in ${uri.fsPath}, triggering re-indexing of changed files`);
-        try {
-            // If this is the first time (no lastIndexTime), do a full index
-            if (!lastIndexTime) {
-                await vscode.commands.executeCommand("contextpilot.indexWorkspace");
-            } else {
-                await vscode.commands.executeCommand("contextpilot.reindexChangedFiles");
+        outputChannel.appendLine(`[INFO] Git change detected in ${uri.fsPath}`);
+        
+        // Add a small delay to avoid rapid successive triggers
+        setTimeout(async () => {
+            try {
+                // If this is the first time (no lastIndexCommit), do a full index
+                if (!lastIndexCommit) {
+                    outputChannel.appendLine(`[INFO] First time indexing, performing full workspace index`);
+                    await vscode.commands.executeCommand("contextpilot.indexWorkspace");
+                } else {
+                    // Check if there are actually changed files before re-indexing
+                    const changedFiles = await getChangedFilesSinceLastIndex(workspacePath);
+                    if (changedFiles.length > 0) {
+                        outputChannel.appendLine(`[INFO] Found ${changedFiles.length} changed files, triggering re-indexing`);
+                        await vscode.commands.executeCommand("contextpilot.reindexChangedFiles");
+                    } else {
+                        outputChannel.appendLine(`[INFO] No changed files found, skipping re-indexing`);
+                    }
+                }
+            } catch (error) {
+                outputChannel.appendLine(`[ERROR] Failed to re-index after Git change: ${error}`);
             }
-        } catch (error) {
-            outputChannel.appendLine(`[ERROR] Failed to re-index after Git change: ${error}`);
-        }
+        }, 1000); // 1 second delay to avoid rapid successive triggers
     };
 
     headWatcher.onDidChange(handleGitChange);
