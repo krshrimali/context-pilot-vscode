@@ -57,15 +57,6 @@
                 "category": "ContextPilot"
             }
         ],
-        "menus": {
-            "editor/context": [
-                {
-                    "submenu": "contextpilot.submenu",
-                    "when": "editorTextFocus",
-                    "group": "contextpilot"
-                }
-            ]
-        },
         "submenus": [
             {
                 "id": "contextpilot.submenu",
@@ -121,11 +112,7 @@
         "configuration": {
             "title": "ContextPilot",
             "properties": {
-                "contextpilot.openaiApiKey": {
-                    "type": "string",
-                    "default": "",
-                    "description": "OpenAI API Key for commit analysis"
-                },
+
                 "contextpilot.autoIndexOnGitCommit": {
                     "type": "boolean",
                     "default": true,
@@ -135,10 +122,7 @@
             }
         }
     },
-    "extensionDependencies": [
-        "GitHub.copilot",
-        "GitHub.copilot-chat"
-    ],
+
     "scripts": {
         "vscode:prepublish": "npm run package",
         "compile": "webpack",
