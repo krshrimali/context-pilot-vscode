@@ -431,7 +431,7 @@ const indexWorkspaceCommand = vscode.commands.registerCommand(
                     outputChannel.appendLine(`[stdout] ${output}`);
                     
                     // Count files being indexed
-                    const fileMatches = output.match(/Indexing file:/g);
+                    const fileMatches = output.match(/Successfully indexed file:/g);
                     if (fileMatches) {
                         filesIndexed += fileMatches.length;
                         progress.report({ message: `${filesIndexed} files indexed` });
